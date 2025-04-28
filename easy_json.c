@@ -2,21 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* wrapper函数前向声明 */
-static EasyJSON *ej_set_wrapper(const char *key, EasyJSON *value);
-static EasyJSON *ej_set_string_wrapper(const char *key, const char *value);
-static EasyJSON *ej_set_number_wrapper(const char *key, double value);
-static EasyJSON *ej_set_bool_wrapper(const char *key, int value);
-static EasyJSON *ej_set_null_wrapper(const char *key);
-static EasyJSON *ej_append_wrapper(EasyJSON *value);
-static EasyJSON *ej_append_string_wrapper(const char *value);
-static EasyJSON *ej_append_number_wrapper(double value);
-static EasyJSON *ej_append_bool_wrapper(int value);
-static EasyJSON *ej_append_null_wrapper(void);
-
 static void ensure_valid(EasyJSON *ej) {
-    if (!ej || !ej->node) {
-        ej->node = cJSON_CreateNull();
+    if (!ej) return; /* 由调用者处理空指针 */
+    if (!ej->node) {
+        ej->node = cJSON_CreateObject(); /* 默认创建对象 */
         ej->owns_memory = 1;
     }
 }
@@ -30,17 +19,6 @@ static EasyJSON *wrap_cjson(cJSON *node, int owns_memory) {
     }
     ej->node = node;
     ej->owns_memory = owns_memory;
-    /* 初始化函数指针 */
-    ej->set = ej_set_wrapper;
-    ej->set_string = ej_set_string_wrapper;
-    ej->set_number = ej_set_number_wrapper;
-    ej->set_bool = ej_set_bool_wrapper;
-    ej->set_null = ej_set_null_wrapper;
-    ej->append = ej_append_wrapper;
-    ej->append_string = ej_append_string_wrapper;
-    ej->append_number = ej_append_number_wrapper;
-    ej->append_bool = ej_append_bool_wrapper;
-    ej->append_null = ej_append_null_wrapper;
     return ej;
 }
 
@@ -147,96 +125,106 @@ EasyJSON *ej_pointer(const EasyJSON *ej, const char *pointer) {
 }
 
 /* 设置值 */
-static EasyJSON *ej_set_impl(EasyJSON *ej, const char *key, EasyJSON *value) {
-    ej = EJ_CHAIN_CALL(ej);
+void ej_set(EasyJSON *ej, const char *key, EasyJSON *value) {
+    if (!ej) return;
+    ensure_valid(ej);
     if (!ej_is_object(ej)) {
-        cJSON_Delete(ej->node);
+        if (ej->owns_memory) cJSON_Delete(ej->node);
         ej->node = cJSON_CreateObject();
+        ej->owns_memory = 1;
     }
+    if (!value || !value->node) return; /* 无效值，跳过 */
     cJSON *old = cJSON_DetachItemFromObject(ej->node, key);
     if (old) cJSON_Delete(old);
     cJSON_AddItemToObject(ej->node, key, value->node);
     value->owns_memory = 0; /* 转移所有权 */
     ej_free(value);
-    return ej;
 }
 
-static EasyJSON *ej_set_wrapper(const char *key, EasyJSON *value) {
-    return ej_set_impl(NULL, key, value);
-}
-
-static EasyJSON *ej_set_string_wrapper(const char *key, const char *value) {
+void ej_set_string(EasyJSON *ej, const char *key, const char *value) {
+    if (!ej || !value) return;
     EasyJSON *val = ej_create_string(value);
-    return ej_set_impl(NULL, key, val);
+    if (!val) return;
+    ej_set(ej, key, val);
 }
 
-static EasyJSON *ej_set_number_wrapper(const char *key, double value) {
+void ej_set_number(EasyJSON *ej, const char *key, double value) {
+    if (!ej) return;
     EasyJSON *val = ej_create_number(value);
-    return ej_set_impl(NULL, key, val);
+    if (!val) return;
+    ej_set(ej, key, val);
 }
 
-static EasyJSON *ej_set_bool_wrapper(const char *key, int value) {
+void ej_set_bool(EasyJSON *ej, const char *key, int value) {
+    if (!ej) return;
     EasyJSON *val = ej_create_bool(value);
-    return ej_set_impl(NULL, key, val);
+    if (!val) return;
+    ej_set(ej, key, val);
 }
 
-static EasyJSON *ej_set_null_wrapper(const char *key) {
+void ej_set_null(EasyJSON *ej, const char *key) {
+    if (!ej) return;
     EasyJSON *val = ej_create_null();
-    return ej_set_impl(NULL, key, val);
+    if (!val) return;
+    ej_set(ej, key, val);
 }
 
 /* 数组操作 */
-static EasyJSON *ej_append_impl(EasyJSON *ej, EasyJSON *value) {
-    ej = EJ_CHAIN_ARRAY(ej);
+void ej_append(EasyJSON *ej, EasyJSON *value) {
+    if (!ej) return;
+    ensure_valid(ej);
     if (!ej_is_array(ej)) {
-        cJSON_Delete(ej->node);
+        if (ej->owns_memory) cJSON_Delete(ej->node);
         ej->node = cJSON_CreateArray();
+        ej->owns_memory = 1;
     }
+    if (!value || !value->node) return; /* 无效值，跳过 */
     cJSON_AddItemToArray(ej->node, value->node);
     value->owns_memory = 0; /* 转移所有权 */
     ej_free(value);
-    return ej;
 }
 
-static EasyJSON *ej_append_wrapper(EasyJSON *value) {
-    return ej_append_impl(NULL, value);
-}
-
-static EasyJSON *ej_append_string_wrapper(const char *value) {
+void ej_append_string(EasyJSON *ej, const char *value) {
+    if (!ej || !value) return;
     EasyJSON *val = ej_create_string(value);
-    return ej_append_impl(NULL, val);
+    if (!val) return;
+    ej_append(ej, val);
 }
 
-static EasyJSON *ej_append_number_wrapper(double value) {
+void ej_append_number(EasyJSON *ej, double value) {
+    if (!ej) return;
     EasyJSON *val = ej_create_number(value);
-    return ej_append_impl(NULL, val);
+    if (!val) return;
+    ej_append(ej, val);
 }
 
-static EasyJSON *ej_append_bool_wrapper(int value) {
+void ej_append_bool(EasyJSON *ej, int value) {
+    if (!ej) return;
     EasyJSON *val = ej_create_bool(value);
-    return ej_append_impl(NULL, val);
+    if (!val) return;
+    ej_append(ej, val);
 }
 
-static EasyJSON *ej_append_null_wrapper(void) {
+void ej_append_null(EasyJSON *ej) {
+    if (!ej) return;
     EasyJSON *val = ej_create_null();
-    return ej_append_impl(NULL, val);
+    if (!val) return;
+    ej_append(ej, val);
 }
 
 /* 删除 */
-EasyJSON *ej_remove(EasyJSON *ej, const char *key) {
-    if (ej_is_object(ej)) {
+void ej_remove(EasyJSON *ej, const char *key) {
+    if (ej && ej_is_object(ej)) {
         cJSON *old = cJSON_DetachItemFromObject(ej->node, key);
         if (old) cJSON_Delete(old);
     }
-    return ej;
 }
 
-EasyJSON *ej_remove_index(EasyJSON *ej, int index) {
-    if (ej_is_array(ej) && index >= 0) {
+void ej_remove_index(EasyJSON *ej, int index) {
+    if (ej && ej_is_array(ej) && index >= 0) {
         cJSON *old = cJSON_DetachItemFromArray(ej->node, index);
         if (old) cJSON_Delete(old);
     }
-    return ej;
 }
 
 /* 序列化 */
